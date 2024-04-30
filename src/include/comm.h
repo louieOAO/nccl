@@ -140,7 +140,7 @@ struct ncclChannel {
 
   struct ncclTree collnetChain;
   struct ncclDirect collnetDirect;
-
+  struct ncclMesh mesh;
   struct ncclNvls nvls;
 
   int id; // index of this channel

@@ -52,6 +52,7 @@ union ncclLLFifoLine {
 
 #define WARP_SIZE 32
 #define MAXCHANNELS 32
+#define MAX_NEIGHBOR 4
 #define NCCL_MAX_NTHREADS 640
 #define NCCL_SIMPLE_MAX_NTHREADS 512
 #define NCCL_LL_MAX_NTHREADS 512
@@ -142,6 +143,12 @@ struct ncclRing {
   int index; // This rank's index in the ring
 };
 
+struct ncclMesh{
+  int x_neighbor;
+  int y_neighbor;
+  int x_rank, y_rank;
+  int index;
+};
 
 // The root of each tree only has one node down (+1 intra-node).
 #define NCCL_MAX_TREE_ARITY_TOP 2
@@ -187,7 +194,7 @@ struct ncclNvls {
 #define NCCL_MAX_ARITY NCCL_MAX_DIRECT_ARITY
 #endif
 
-#define NCCL_MAX_CONNS 2
+#define NCCL_MAX_CONNS 4
 struct ncclChannelPeer {
   struct ncclConnector send[NCCL_MAX_CONNS];
   struct ncclConnector recv[NCCL_MAX_CONNS];
@@ -314,6 +321,7 @@ struct alignas(16) ncclDevChannel {
   struct ncclDevChannelPeer** peers;
   struct ncclRing ring;
   struct ncclTree tree;
+  struct ncclMesh mesh;
   struct ncclTree collnetChain;
   struct ncclDirect collnetDirect;
   struct ncclNvls nvls;

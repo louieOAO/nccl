@@ -194,7 +194,6 @@ static inline void groupResetJobState(struct ncclGroupJob* job) {
 
 static void groupCleanup(struct ncclComm** groupCommHeadPtr, struct ncclComm** groupCommPreconnectHeadPtr, struct ncclIntruQueue<struct ncclAsyncJob, &ncclAsyncJob::next>* asyncJobsPtr, ncclResult_t* groupErrorPtr, int* groupBlockingPtr, volatile bool* groupJobAbortFlagPtr, ncclResult_t error) {
   struct ncclComm* comm = *groupCommHeadPtr;
-
   /* reset all thread local variables */
   *groupCommHeadPtr = NULL;
   *groupCommPreconnectHeadPtr = NULL;
@@ -202,51 +201,51 @@ static void groupCleanup(struct ncclComm** groupCommHeadPtr, struct ncclComm** g
   *groupBlockingPtr = -1;
   *groupJobAbortFlagPtr = false;
 
-  while (comm != nullptr) {
-    struct ncclComm* next = comm->groupNext;
-    (void) ncclGroupCommLeave(comm); // overwrites comm->groupNext
-    // We don't know if preconnect succeeded or happened at all, so clear
-    // the flags that let `taskAppend()` skip over checking if preconnect
-    // is needed.
-    comm->preconnectNext = reinterpret_cast<struct ncclComm*>(0x1);
-    for (int i = 0; i < comm->nRanks; i++) {
-      comm->tasks.peers[i].sendSeen = false;
-      comm->tasks.peers[i].recvSeen = false;
-      comm->connectSend[i] = 0UL;
-      comm->connectRecv[i] = 0UL;
-    }
-    comm->unlaunchedPlansHead = nullptr;
-    // Reclaim abandoned kernel plan memory. Note ncclWork structs were already
-    // reclaimed by a `ncclMemoryStackPop(&comm->memScoped)` during `ncclGroupCommLeave()`.
-    while (!ncclIntruQueueEmpty(&comm->planQueue)) {
-      struct ncclKernelPlan* plan = ncclIntruQueueDequeue(&comm->planQueue);
-      // Persistent plans will be reclaimed via the callbackQueue when the
-      // graph drops its UserObject reference.
-      if (!plan->persistent) {
-        for (int c = 0; c < MAXCHANNELS; c++) {
-          while (!ncclIntruQueueEmpty(&plan->channels[c].proxyOpQueue)) {
-            struct ncclProxyOp* pxop = ncclIntruQueueDequeue(&plan->channels[c].proxyOpQueue);
-            ncclMemoryPoolFree(&comm->memPool_ncclProxyOp, pxop);
-          }
-        }
-        ncclMemoryPoolFree(&comm->memPool_ncclKernelPlan, plan);
-      }
-    }
-    // Reset comm->tasks to empty.
-    comm->tasks.nTasksColl = 0;
-    comm->tasks.nTasksP2p = 0;
-    comm->tasks.workBytesTotal = 0;
-    comm->tasks.streams = nullptr;
-    ncclIntruQueueConstruct(&comm->tasks.collQueue);
-    for (int i = 0; i < comm->nRanks; i++) {
-      ncclIntruQueueConstruct(&comm->tasks.peers[i].sendQueue);
-      ncclIntruQueueConstruct(&comm->tasks.peers[i].recvQueue);
-    }
+  // while (comm != nullptr) {
+  //   struct ncclComm* next = comm->groupNext;
+  //   (void) ncclGroupCommLeave(comm); // overwrites comm->groupNext
+  //   // We don't know if preconnect succeeded or happened at all, so clear
+  //   // the flags that let `taskAppend()` skip over checking if preconnect
+  //   // is needed.
+  //   comm->preconnectNext = reinterpret_cast<struct ncclComm*>(0x1);
+  //   for (int i = 0; i < comm->nRanks; i++) {
+  //     comm->tasks.peers[i].sendSeen = false;
+  //     comm->tasks.peers[i].recvSeen = false;
+  //     comm->connectSend[i] = 0UL;
+  //     comm->connectRecv[i] = 0UL;
+  //   }
+  //   comm->unlaunchedPlansHead = nullptr;
+  //   // Reclaim abandoned kernel plan memory. Note ncclWork structs were already
+  //   // reclaimed by a `ncclMemoryStackPop(&comm->memScoped)` during `ncclGroupCommLeave()`.
+  //   while (!ncclIntruQueueEmpty(&comm->planQueue)) {
+  //     struct ncclKernelPlan* plan = ncclIntruQueueDequeue(&comm->planQueue);
+  //     // Persistent plans will be reclaimed via the callbackQueue when the
+  //     // graph drops its UserObject reference.
+  //     if (!plan->persistent) {
+  //       for (int c = 0; c < MAXCHANNELS; c++) {
+  //         while (!ncclIntruQueueEmpty(&plan->channels[c].proxyOpQueue)) {
+  //           struct ncclProxyOp* pxop = ncclIntruQueueDequeue(&plan->channels[c].proxyOpQueue);
+  //           ncclMemoryPoolFree(&comm->memPool_ncclProxyOp, pxop);
+  //         }
+  //       }
+  //       ncclMemoryPoolFree(&comm->memPool_ncclKernelPlan, plan);
+  //     }
+  //   }
+  //   // Reset comm->tasks to empty.
+  //   comm->tasks.nTasksColl = 0;
+  //   comm->tasks.nTasksP2p = 0;
+  //   comm->tasks.workBytesTotal = 0;
+  //   comm->tasks.streams = nullptr;
+  //   ncclIntruQueueConstruct(&comm->tasks.collQueue);
+  //   for (int i = 0; i < comm->nRanks; i++) {
+  //     ncclIntruQueueConstruct(&comm->tasks.peers[i].sendQueue);
+  //     ncclIntruQueueConstruct(&comm->tasks.peers[i].recvQueue);
+  //   }
 
-    if (!comm->config.blocking)
-      (void) ncclCommSetAsyncError(comm, error);
-    comm = next;
-  }
+  //   if (!comm->config.blocking)
+  //     (void) ncclCommSetAsyncError(comm, error);
+  //   comm = next;
+  // }
 
   /* reset everything */
   while (!ncclIntruQueueEmpty(asyncJobsPtr)) {
@@ -295,6 +294,7 @@ static ncclResult_t groupLaunch(struct ncclAsyncJob *job_) {
   if (!ncclIntruQueueEmpty(asyncJobsMain)) {
     struct ncclAsyncJob* job = ncclIntruQueueHead(asyncJobsMain);
     do {
+      INFO(NCCL_INIT, "ncclIntruQueueEmpty\n");
       SYSCHECKGOTO(pthread_create(&job->thread, nullptr, ncclAsyncJobMain, job), ret, fail);
       job = job->next;
     } while (job != nullptr);

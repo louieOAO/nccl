@@ -453,6 +453,7 @@ static ncclResult_t devCommSetup(ncclComm_t comm) {
     tmpCommAndChans.channels[c].collnetDirect = comm->channels[c].collnetDirect;
     tmpCommAndChans.channels[c].nvls = comm->channels[c].nvls;
     tmpCommAndChans.channels[c].workFifoDone = &comm->workFifoDone[c];
+    tmpCommAndChans.channels[c].mesh = comm->channels[c].mesh;
 
     if (comm->channels[c].ring.userRanks != nullptr) {
       NCCLCHECKGOTO(ncclCudaMemcpyAsync(tmpCommAndChans.channels[c].ring.userRanks, comm->channels[c].ring.userRanks, nRanks, comm->sharedRes->deviceStream.cudaStream), ret, fail);
@@ -536,6 +537,26 @@ static ncclResult_t setupChannel(struct ncclComm* comm, int channelId, int rank,
   for (int i=0; i<nranks; i++) {
     ring->userRanks[i] = ringRanks[(i+ixRank)%nranks];
   }
+  struct ncclMesh* mesh = &comm->channels[channelId].mesh;
+  // INFO(NCCL_INIT, "mesh allocate %d\n");
+  // ncclCalloc(&mesh->x_neighbor, 4);
+  // ncclCalloc(&mesh->y_neighbor, 4);
+  // INFO(NCCL_INIT, "mesh allocate %d\n");
+
+  mesh->index = rank;
+  // x = 0, y = 1
+  // 0<--->1
+  // ^     ^
+  // |     |
+  // v     v
+  // 3<--->2
+  int mesh_rank[2][4] = {{1, 0, 3, 2}, {3,2,1,0}};
+  mesh->x_neighbor = mesh_rank[0][mesh->index];
+  // mesh->x_neighbor = -1;
+  mesh->y_neighbor = mesh_rank[1][mesh->index];
+  // mesh->y_neighbor = -1;
+  mesh->x_rank = rank%2;
+  mesh->y_rank = rank%2;
   return ncclSuccess;
 }
 
@@ -900,10 +921,11 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   int nNodes = 1;
   cpu_set_t affinitySave;
   struct ncclTopoGraph ringGraph;
+  struct ncclTopoGraph meshGraph;
   struct ncclTopoGraph treeGraph;
   struct ncclTopoGraph collNetGraph;
   struct ncclTopoGraph nvlsGraph;
-  struct ncclTopoGraph* graphs[] = { &treeGraph, &ringGraph, &collNetGraph, &collNetGraph, &nvlsGraph, &nvlsGraph };
+  struct ncclTopoGraph* graphs[] = { &treeGraph, &ringGraph, &collNetGraph, &collNetGraph, &nvlsGraph, &nvlsGraph, &meshGraph };
 
   struct graphInfo {
     int pattern;
@@ -1051,6 +1073,8 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   ringGraph.maxChannels = MAXCHANNELS/2;
   NCCLCHECKGOTO(ncclTopoCompute(comm->topo, &ringGraph), ret, fail);
   NCCLCHECKGOTO(ncclTopoPrintGraph(comm->topo, &ringGraph), ret, fail);
+
+  memset(&meshGraph, 0, sizeof(struct ncclTopoGraph));
 
   memset(&treeGraph, 0, sizeof(struct ncclTopoGraph));
   treeGraph.id = 1;
@@ -1259,9 +1283,15 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
     NCCLCHECKGOTO(setupChannel(comm, c, rank, nranks, rings+c*nranks), ret, fail);
     if (comm->nRanks == 1) continue;
     NCCLCHECKGOTO(ncclTransportP2pConnect(comm, c, 1, &channel->ring.prev, 1, &channel->ring.next, 0), ret, fail);
+    NCCLCHECKGOTO(ncclTransportP2pConnect(comm, c, 1, &channel->mesh.x_neighbor, 1, &channel->mesh.x_neighbor, 0), ret, fail);
+    NCCLCHECKGOTO(ncclTransportP2pConnect(comm, c, 1, &channel->mesh.y_neighbor, 1, &channel->mesh.y_neighbor, 0), ret, fail);
   }
   NCCLCHECKGOTO(ncclTransportP2pSetup(comm, &ringGraph, 0), ret, fail);
   INFO(NCCL_INIT, "Connected all rings");
+
+  // NCCLCHECKGOTO(ncclTransportP2pSetup(comm, &ringGraph, 0), ret, fail);
+  // INFO(NCCL_INIT, "Connected all meshs");
+  
 
   // Connect Trees
   for (int c=0; c<comm->nChannels; c++) {
@@ -1399,13 +1429,14 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   // Call devCommSetup before the last barrier, making sure we don't have a thread running in front and starting to
   // launch NCCL kernels before all cuda mem allocation is complete. That could cause a deadlock.
   NCCLCHECKGOTO(devCommSetup(comm), ret, fail);
+  // INFO(NCCL_INIT, "devCommSetup Finish %d",comm->devComm->channels[0].mesh.index );
 
   /* Local intra-node barrier */
   NCCLCHECKGOTO(bootstrapIntraNodeBarrier(comm->bootstrap, comm->localRankToRank, comm->localRank, comm->localRanks, comm->localRankToRank[0]), ret, fail);
 
   // We should have allocated all buffers, collective fifos, ... we can
   // restore the affinity.
-  TRACE(NCCL_INIT, "rank %d nranks %d - DONE", rank, nranks);
+  // TRACE(NCCL_INIT, "rank %d nranks %d - DONE", rank, nranks);
 
 exit:
   if (CPU_COUNT(&comm->cpuAffinity)) sched_setaffinity(0, sizeof(cpu_set_t), &affinitySave);

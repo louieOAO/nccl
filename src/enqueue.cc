@@ -1356,7 +1356,11 @@ ncclResult_t ncclLaunchKernel(struct ncclComm* comm, struct ncclKernelPlan* plan
   dim3 block = {(unsigned)plan->threadPerBlock, 1, 1};
   size_t smem = ncclShmemDynamicSize(comm->cudaArch);
   void *args[3] = {&comm->devComm, &plan->channelMask, &plan->workHead};
-
+  // for(int i=0;i<23;i++){
+    // printf("i = %d %d\n", i, ((ncclDevCommAndChannels*)(&comm->devComm))->channels[i].ring.index);
+  // }
+  
+  // printf("Hello\n");
   #if CUDART_VERSION >= 11080
   int driverVersion;
   NCCLCHECK(ncclCudaDriverVersion(&driverVersion));
