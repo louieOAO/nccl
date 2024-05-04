@@ -143,9 +143,11 @@ struct ncclRing {
   int index; // This rank's index in the ring
 };
 
+
+#define NCCL_MAX_MESH_NEIGHBOR 2
 struct ncclMesh{
-  int x_neighbor;
-  int y_neighbor;
+  int x_prev, x_next;
+  int y_prev, y_next;
   int x_rank, y_rank;
   int index;
 };

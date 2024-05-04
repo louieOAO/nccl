@@ -193,7 +193,6 @@ static inline void groupResetJobState(struct ncclGroupJob* job) {
 }
 
 static void groupCleanup(struct ncclComm** groupCommHeadPtr, struct ncclComm** groupCommPreconnectHeadPtr, struct ncclIntruQueue<struct ncclAsyncJob, &ncclAsyncJob::next>* asyncJobsPtr, ncclResult_t* groupErrorPtr, int* groupBlockingPtr, volatile bool* groupJobAbortFlagPtr, ncclResult_t error) {
-  struct ncclComm* comm = *groupCommHeadPtr;
   /* reset all thread local variables */
   *groupCommHeadPtr = NULL;
   *groupCommPreconnectHeadPtr = NULL;
@@ -294,7 +293,6 @@ static ncclResult_t groupLaunch(struct ncclAsyncJob *job_) {
   if (!ncclIntruQueueEmpty(asyncJobsMain)) {
     struct ncclAsyncJob* job = ncclIntruQueueHead(asyncJobsMain);
     do {
-      INFO(NCCL_INIT, "ncclIntruQueueEmpty\n");
       SYSCHECKGOTO(pthread_create(&job->thread, nullptr, ncclAsyncJobMain, job), ret, fail);
       job = job->next;
     } while (job != nullptr);

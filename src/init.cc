@@ -538,25 +538,33 @@ static ncclResult_t setupChannel(struct ncclComm* comm, int channelId, int rank,
     ring->userRanks[i] = ringRanks[(i+ixRank)%nranks];
   }
   struct ncclMesh* mesh = &comm->channels[channelId].mesh;
-  // INFO(NCCL_INIT, "mesh allocate %d\n");
-  // ncclCalloc(&mesh->x_neighbor, 4);
-  // ncclCalloc(&mesh->y_neighbor, 4);
-  // INFO(NCCL_INIT, "mesh allocate %d\n");
 
-  mesh->index = rank;
   // x = 0, y = 1
   // 0<--->1
   // ^     ^
   // |     |
   // v     v
   // 3<--->2
-  int mesh_rank[2][4] = {{1, 0, 3, 2}, {3,2,1,0}};
-  mesh->x_neighbor = mesh_rank[0][mesh->index];
+
+  mesh->index = rank;
+  int mesh_x_rank[8][2] = {{1, 3}, {2, 0}, {3, 1}, {0, 2}, {5, 7}, {6, 4}, {7, 5}, {4, 6}};
+  int mesh_y_rank[8][1] = {{4}, {5}, {6}, {7}, {0}, {1}, {2}, {3}};
+  mesh->x_prev = mesh_x_rank[rank][1];
+  mesh->x_next = mesh_x_rank[rank][0];
+
+  mesh->y_prev = mesh_y_rank[rank][0];
+  mesh->y_next = mesh_y_rank[rank][0];
+
+  mesh->x_rank = rank%4;
+  mesh->y_rank = rank >= 4 ? 1 : 0;
+
+  // int mesh_rank[2][4] = {{1, 0, 3, 2}, {3,2,1,0}};
+  // mesh->x_neighbor = mesh_rank[0][mesh->index];
   // mesh->x_neighbor = -1;
-  mesh->y_neighbor = mesh_rank[1][mesh->index];
+  // mesh->y_neighbor = mesh_rank[1][mesh->index];
   // mesh->y_neighbor = -1;
-  mesh->x_rank = rank%2;
-  mesh->y_rank = rank%2;
+  // mesh->x_rank = rank%2;
+  // mesh->y_rank = rank%2;
   return ncclSuccess;
 }
 
@@ -1283,15 +1291,11 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
     NCCLCHECKGOTO(setupChannel(comm, c, rank, nranks, rings+c*nranks), ret, fail);
     if (comm->nRanks == 1) continue;
     NCCLCHECKGOTO(ncclTransportP2pConnect(comm, c, 1, &channel->ring.prev, 1, &channel->ring.next, 0), ret, fail);
-    NCCLCHECKGOTO(ncclTransportP2pConnect(comm, c, 1, &channel->mesh.x_neighbor, 1, &channel->mesh.x_neighbor, 0), ret, fail);
-    NCCLCHECKGOTO(ncclTransportP2pConnect(comm, c, 1, &channel->mesh.y_neighbor, 1, &channel->mesh.y_neighbor, 0), ret, fail);
+    NCCLCHECKGOTO(ncclTransportP2pConnect(comm, c, 1, &channel->mesh.x_prev, 1, &channel->mesh.x_next, 0), ret, fail);
+    NCCLCHECKGOTO(ncclTransportP2pConnect(comm, c, 1, &channel->mesh.y_prev, 1, &channel->mesh.y_next, 0), ret, fail);
   }
   NCCLCHECKGOTO(ncclTransportP2pSetup(comm, &ringGraph, 0), ret, fail);
   INFO(NCCL_INIT, "Connected all rings");
-
-  // NCCLCHECKGOTO(ncclTransportP2pSetup(comm, &ringGraph, 0), ret, fail);
-  // INFO(NCCL_INIT, "Connected all meshs");
-  
 
   // Connect Trees
   for (int c=0; c<comm->nChannels; c++) {
