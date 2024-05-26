@@ -446,7 +446,6 @@ static ncclResult_t addCBDCollToPlan(
   size_t alignCount;
   size_t lastChunkCount;
   int rnChannel = 0;
-
   NCCLCHECKGOTO(computeCollChunkInfo(collInfo, collInfo->aggnBytes, collInfo->nChannels), ret, fail);
   NCCLCHECKGOTO(computeCollAlignCount(collInfo, &alignCount), ret, fail);
   NCCLCHECKGOTO(initCollWorkElem(collInfo, &workElem), ret, fail);
@@ -480,7 +479,7 @@ static ncclResult_t addCBDCollToPlan(
       NCCLCHECKGOTO(initCollProxyOp(collInfo, c, opCount, steps, &proxyOp), ret, fail);
       NCCLCHECKGOTO(addProxyOpIfNeeded(comm, plan, &proxyOp), ret, fail);
     }
-
+    INFO(NCCL_INIT, "channel %d workCount = %ld, workOffset = %ld lastChunkCount = %ld", c, workCount, workOffset, lastChunkCount);
     workBytesTotal -= enqBytes;
     workCountTotal -= workCount;
     chans[c].collBytes += enqBytes;
@@ -746,7 +745,6 @@ static ncclResult_t scheduleCollTasksToPlan(
   struct ncclTasks* tasks = &comm->tasks;
   size_t totalCBDBytes = tasks->workBytesTotal;
   struct ncclInfo* collInfo;
-
   if (!ncclIntruQueueEmpty(&tasks->collQueue)) {
     int usableChannels = 0, accChannels = 0;
 
@@ -1356,11 +1354,6 @@ ncclResult_t ncclLaunchKernel(struct ncclComm* comm, struct ncclKernelPlan* plan
   dim3 block = {(unsigned)plan->threadPerBlock, 1, 1};
   size_t smem = ncclShmemDynamicSize(comm->cudaArch);
   void *args[3] = {&comm->devComm, &plan->channelMask, &plan->workHead};
-  // for(int i=0;i<23;i++){
-    // printf("i = %d %d\n", i, ((ncclDevCommAndChannels*)(&comm->devComm))->channels[i].ring.index);
-  // }
-  
-  // printf("Hello\n");
   #if CUDART_VERSION >= 11080
   int driverVersion;
   NCCLCHECK(ncclCudaDriverVersion(&driverVersion));
@@ -1776,6 +1769,7 @@ static ncclResult_t computeCollChunkInfo(struct ncclInfo* collInfo, size_t nByte
   collInfo->chunkSteps = chunkSteps;
   collInfo->sliceSteps = sliceSteps;
   collInfo->stepSize = stepSize;
+
   return ncclSuccess;
 }
 

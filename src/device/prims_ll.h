@@ -104,6 +104,7 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL, P2p>:
       if (checkAbort(spins, 0)) break;
     } while ((flag1 != flag) || (flag2 != flag));
     uint64_t val64 = data1 + (((uint64_t)data2) << 32);
+
     return val64;
   }
 
@@ -223,6 +224,8 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL, P2p>:
     }
   }
 
+// directRecvReduceCopySend: LLGenericOp<1, 1, Input, Output>(inpIx, outIx, eltN, postOp);
+// send: LLGenericOp<0, 1, Input, -1>(inpIx, -1, eltN, false);
   template <int RECV, int SEND, int SrcBuf, int DstBuf>
   __device__ __forceinline__ void LLGenericOp(intptr_t srcIx, intptr_t dstIx, int nelem, bool postOp) {
     constexpr int SRC = SrcBuf != -1 ? 1 : 0;
@@ -233,13 +236,13 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL, P2p>:
     // Always waitSend in case of cleanup
     nelem = nelem < 0 ? 0 : nelem;
     if (SEND) waitSend(divUp(nelem, EltPerLine)*sizeof(ncclLLFifoLine));
-
     nelem -= tid*EltPerLine;
     srcElts += tid*EltPerLine;
     dstElts += tid*EltPerLine;
     int offset = tid;
     int eltPerTrip = nthreads*EltPerLine;
     while (nelem > 0) {
+      
       int eltInLine = EltPerLine < nelem ? EltPerLine : nelem;
 
       DataLoader dl;
@@ -291,6 +294,7 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL, P2p>:
         incSend(i, offset);
       incSend(0, offset);
     }
+    
   }
 
   __device__ __forceinline__ void loadRecvConn(struct ncclConnInfo* conn, int i) {
@@ -392,4 +396,5 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL, P2p>:
   __device__ void recvReduceCopySend(intptr_t inpIx, intptr_t outIx, int eltN, bool postOp=false) {
     return LLGenericOp<1, 1, Input, Output>(inpIx, outIx, eltN, postOp);
   }
+
 };

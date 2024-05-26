@@ -155,6 +155,7 @@ static ncclResult_t doLaunches(struct ncclComm* head) {
         if (moreRounds) {
           // Pop next unlaunched kernel
           struct ncclKernelPlan* plan = comm->unlaunchedPlansHead;
+
           if (plan != nullptr) {
             comm->unlaunchedPlansHead = plan->next;
             CUDACHECKGOTO(cudaSetDevice(comm->cudaDev), result, failure);
@@ -375,7 +376,6 @@ ncclResult_t ncclGroupEndInternal() {
   if ((--ncclGroupDepth) > 0) goto exit;
 
   if ((ret = ncclGroupError) != ncclSuccess) goto fail;
-
   if (ncclGroupCommHead != nullptr || !ncclIntruQueueEmpty(&ncclAsyncJobs) || ncclGroupCommPreconnectHead != nullptr) {
     ncclGroupJobMain.groupCommHeadPtr = &ncclGroupCommHead;
     ncclGroupJobMain.groupCommPreconnectHeadPtr = &ncclGroupCommPreconnectHead;

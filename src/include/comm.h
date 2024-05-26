@@ -26,7 +26,6 @@ struct cudaLaunchParams {
   cudaStream_t stream;
 };
 #endif
-
 #define CACHE_LINE_SIZE 128
 #define MEM_ALIGN 4096
 #define CUDA_IPC_MIN 2097152UL

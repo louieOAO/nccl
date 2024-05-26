@@ -118,6 +118,21 @@ static float getNetOverhead(struct ncclComm* comm) {
 }
 
 ncclResult_t ncclTopoTuneModel(struct ncclComm* comm, int minCompCap, int maxCompCap, struct ncclTopoGraph** graphs) {
+
+  // const char *usemesh = ncclGetEnv("NCCL_USINGMESH");
+  // if (usemesh) {
+  //   INFO(NCCL_ENV, "usemesh set by environment to %s", usemesh);
+  //   char str1[15];
+  //   strcpy(str1, "mesh");
+  //   if(strcmp(usemesh, str1) == 0){
+  //     usingmesh = 1;
+  //   }else{
+  //     usingmesh = 0;
+  //   }
+    
+  // }
+
+
   int simpleDefaultThreads = (graphs[NCCL_ALGO_RING]->bwIntra*graphs[NCCL_ALGO_RING]->nChannels <= PCI_BW) ? 256 : NCCL_SIMPLE_MAX_NTHREADS;
   comm->maxThreads[NCCL_ALGO_RING][NCCL_PROTO_SIMPLE] =
     getNthreads("NCCL_NTHREADS", ncclParamNthreads(), 2*WARP_SIZE, NCCL_SIMPLE_MAX_NTHREADS, simpleDefaultThreads);
