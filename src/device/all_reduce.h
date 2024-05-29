@@ -227,6 +227,165 @@ namespace {
   }
 
   template<typename T, typename RedOp, typename Proto>
+  __device__ __forceinline__ void runMesh_X(ncclWorkElem *args) {
+    const int tid = threadIdx.x;
+    const int nthreads = (int)args->nWarps * WARP_SIZE;
+    ncclMesh *mesh = &ncclShmem.channel.mesh;
+    ssize_t chunkCount = args->chunkCount;
+    const int nranks = ncclShmem.comm.nRanks;
+    const ssize_t loopCount = nranks * chunkCount;
+    ssize_t offset;
+    ssize_t gridOffset = args->workOffset;
+    ssize_t channelCount = args->workCount;
+    int nelem;
+    int chunk;
+    // int meshIx = mesh->index;
+
+    {
+      chunkCount = args->chunkCount;
+      Primitives<T, RedOp, FanSymmetric<1>, 1, Proto, 0> prims_x
+      (tid, nthreads, &mesh->x_prev, &mesh->x_next, args->sendbuff, args->recvbuff, args->redOpArg);
+      int x_nranks=4, xIx = mesh->x_rank, x_ratio_rank = nranks/x_nranks;
+
+      for (ssize_t elemOffset = 0; elemOffset < channelCount; elemOffset += loopCount) {
+
+        ssize_t remCount = channelCount - elemOffset;
+        ssize_t chunkOffset;
+        if (remCount < loopCount) chunkCount = args->lastChunkCount;
+
+        auto modRanks = [&]__device__(int r)->int {
+          return r - (r >= x_nranks ? x_nranks : 0);
+        };
+        #pragma unroll 2
+        for(int index=0;index<x_ratio_rank;index++){
+
+          // step 0: push data to next GPU
+          chunk = modRanks(xIx + x_nranks - 1) * x_ratio_rank + index;
+          chunkOffset = chunk * chunkCount;
+          offset = gridOffset + elemOffset + chunkOffset;
+          nelem = (int)min(chunkCount, remCount - chunkOffset);
+          prims_x.send(offset, nelem);
+          
+          // k-2 steps: reduce and copy to next GPU
+          for (int j = 2; j < x_nranks; ++j) {
+            chunk = modRanks(xIx + x_nranks - j) * x_ratio_rank + index;
+            chunkOffset = chunk * chunkCount;
+            offset = gridOffset + elemOffset + chunkOffset;
+            nelem = (int)min(chunkCount, remCount - chunkOffset);
+            prims_x.recvReduceSend(offset, nelem);
+          }
+
+          // step k-1: reduce this buffer and data, which will produce the final
+          // result that we store in this data and push to the next GPU
+          chunk = (xIx + 0) * x_ratio_rank + index;
+          chunkOffset = chunk * chunkCount;
+          offset = gridOffset + elemOffset + chunkOffset;
+          nelem = (int)min(chunkCount, remCount - chunkOffset);
+          prims_x.directRecvReduceCopySend(offset, offset, nelem, /*postOp=*/true);
+
+          // k-2 steps: copy to next GPU
+          for (int j = 1; j < x_nranks - 1; ++j) {
+            chunk = modRanks(xIx + x_nranks - j) * x_ratio_rank + index;
+            chunkOffset = chunk * chunkCount;
+            offset = gridOffset + elemOffset + chunkOffset;
+            nelem = (int)min(chunkCount, remCount - chunkOffset);
+            prims_x.directRecvCopySend(offset, nelem);
+          }
+
+          // Make final copy from buffer to dest.
+          chunk = modRanks(xIx + 1) * x_ratio_rank + index;
+          chunkOffset = chunk * chunkCount;
+          offset = gridOffset + elemOffset + chunkOffset;
+          nelem = (int)min(chunkCount, remCount - chunkOffset);
+          prims_x.directRecv(offset, nelem);
+        }
+
+      }   
+    
+
+    }
+  
+  }
+
+  template<typename T, typename RedOp, typename Proto>
+  __device__ __forceinline__ void runMesh_Y(ncclWorkElem *args) {
+    const int tid = threadIdx.x;
+    const int nthreads = (int)args->nWarps * WARP_SIZE;
+    ncclMesh *mesh = &ncclShmem.channel.mesh;
+    ssize_t chunkCount = args->chunkCount;
+    const int nranks = ncclShmem.comm.nRanks;
+    const ssize_t loopCount = nranks * chunkCount;
+    ssize_t offset;
+    ssize_t gridOffset = args->workOffset;
+    ssize_t channelCount = args->workCount;
+    int nelem;
+    int chunk;
+    
+    {
+      Primitives<T, RedOp, FanSymmetric<1>, 1, Proto, 0> prims_y
+        (tid, nthreads, &mesh->y_prev, &mesh->y_next, args->sendbuff, args->recvbuff, args->redOpArg);
+      int y_nranks = 2, yIx = mesh->y_rank, y_ratio_rank = nranks/y_nranks;
+
+      for (ssize_t elemOffset = 0; elemOffset < channelCount; elemOffset += loopCount) {
+
+        ssize_t remCount = channelCount - elemOffset;
+        ssize_t chunkOffset;
+        if (remCount < loopCount) {
+          chunkCount = args->lastChunkCount;
+        }
+
+        auto modRanks = [&]__device__(int r)->int {
+          return r - (r >= y_nranks ? y_nranks : 0);
+        };
+
+        for(int index=0;index<y_ratio_rank;index++){
+          // step 0: push data to next GPU
+          chunk = modRanks(yIx + y_nranks - 1) * y_ratio_rank + index;
+          chunkOffset = chunk * chunkCount;
+          offset = gridOffset + elemOffset + chunkOffset;
+
+          nelem = (int)min(chunkCount, remCount - chunkOffset);
+          prims_y.send(offset, nelem);
+
+          // k-2 steps: reduce and copy to next GPU
+          for (int j = 2; j < y_nranks; ++j) {
+            chunk = modRanks(yIx + y_nranks - j) * y_ratio_rank+ index;
+            chunkOffset = chunk * chunkCount;
+            offset = gridOffset + elemOffset + chunkOffset;
+            nelem = (int)min(chunkCount, remCount - chunkOffset);
+            prims_y.recvReduceSend(offset, nelem);
+          }
+          // step k-1: reduce this buffer and data, which will produce the final
+          // result that we store in this data and push to the next GPU
+          chunk = (yIx + 0)*y_ratio_rank+ index;
+          chunkOffset = chunk * chunkCount;
+          offset = gridOffset + elemOffset + chunkOffset;
+          nelem = (int)min(chunkCount, remCount - chunkOffset);
+          prims_y.directRecvReduceCopySend(offset, offset, nelem, /*postOp=*/true);
+          // k-2 steps: copy to next GPU
+          for (int j = 1; j < y_nranks - 1; ++j) {
+            chunk = modRanks(yIx + y_nranks - j) * y_ratio_rank+ index;
+            chunkOffset = chunk * chunkCount;
+            offset = gridOffset + elemOffset + chunkOffset;
+            nelem = (int)min(chunkCount, remCount - chunkOffset);
+            prims_y.directRecvCopySend(offset, nelem);
+          }
+
+          // // Make final copy from buffer to dest.
+          chunk = modRanks(yIx + 1) * y_ratio_rank + index;
+          chunkOffset = chunk * chunkCount;
+          offset = gridOffset + elemOffset + chunkOffset;
+          nelem = (int)min(chunkCount, remCount - chunkOffset);
+          prims_y.directRecv(offset, nelem);
+        }
+
+      }
+  
+    }
+
+  }
+
+  template<typename T, typename RedOp, typename Proto>
   __device__ __forceinline__ void runTreeUpDown(ncclWorkElem *args) {
     const int tid = threadIdx.x;
     const int nthreads = (int)args->nWarps * WARP_SIZE;
@@ -375,8 +534,23 @@ struct RunWorkElement<ncclFuncAllReduce, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_SI
   __device__ __forceinline__ void run(ncclWorkElem *args) {
     using Proto = ProtoSimple<ALLREDUCE_CHUNKSTEPS/ALLREDUCE_SLICESTEPS, ALLREDUCE_SLICESTEPS>;
     // runRing<T, RedOp, Proto>(args);
-    runMesh<T, RedOp, Proto>(args);
-    
+    // runMesh<T, RedOp, Proto>(args);
+    switch (ncclShmem.mode){
+      case Ring:
+        runRing<T, RedOp, Proto>(args);
+        break;
+      case Mesh:
+        runMesh<T, RedOp, Proto>(args);
+        break;
+      case Mesh_X:
+        runMesh_X<T, RedOp, Proto>(args);
+        // runMesh_Y<T, RedOp, Proto>(args);
+        break;
+      case Mesh_Y:
+        runMesh_Y<T, RedOp, Proto>(args);
+        // runMesh_X<T, RedOp, Proto>(args);
+        break;
+    }
   }
 };
 
@@ -866,7 +1040,21 @@ template<typename T, typename RedOp>
 struct RunWorkElement<ncclFuncAllReduce, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_LL> {
   __device__ __forceinline__ void run(ncclWorkElem *args) {
     // runRing<T, RedOp, ProtoLL>(args);
-    runMesh<T, RedOp, ProtoLL>(args);
+    // runMesh<T, RedOp, ProtoLL>(args);
+    switch (ncclShmem.mode){
+      case Ring:
+        runRing<T, RedOp, ProtoLL>(args);
+        break;
+      case Mesh:
+        runMesh<T, RedOp, ProtoLL>(args);
+        break;
+      case Mesh_X:
+        runMesh_X<T, RedOp, ProtoLL>(args);
+        break;
+      case Mesh_Y:
+        runMesh_Y<T, RedOp, ProtoLL>(args);
+        break;
+    }
   }
 };
 
@@ -881,7 +1069,22 @@ template<typename T, typename RedOp>
 struct RunWorkElement<ncclFuncAllReduce, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_LL128> {
   __device__ __forceinline__ void run(ncclWorkElem *args) {
     // runRing<T, RedOp, ProtoLL128>(args);
-    runMesh<T, RedOp, ProtoLL128>(args);
+    // runMesh<T, RedOp, ProtoLL128>(args);
+    switch (ncclShmem.mode){
+      
+      case Ring:
+        runRing<T, RedOp, ProtoLL128>(args);
+        break;
+      case Mesh:
+        runMesh<T, RedOp, ProtoLL128>(args);
+        break;
+      case Mesh_X:
+        runMesh_X<T, RedOp, ProtoLL128>(args);
+        break;
+      case Mesh_Y:
+        runMesh_Y<T, RedOp, ProtoLL128>(args);
+        break;
+    }
   }
 };
 

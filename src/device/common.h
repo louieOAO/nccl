@@ -35,6 +35,7 @@ struct ncclShmemData {
   uint64_t redOpArgs[NCCL_MAX_ARITY+1];
   int channelId;
   int aborted;
+  size_t mode;
   alignas(16) struct ncclDevComm comm;
   alignas(16) struct ncclDevChannel channel;
   alignas(16) struct ncclWork work;
@@ -122,8 +123,11 @@ static __device__ void ncclRedopPtrDeref(struct ncclWorkElem* we) {
 }
 
 template<int SpecializedFnId, typename SpecializedRunWork>
-__device__ void ncclKernelMain(struct ncclDevComm* comm, uint64_t channelMask, struct ncclWork* workHead) {
+__device__ void ncclKernelMain(struct ncclDevComm* comm, uint64_t channelMask, struct ncclWork* workHead, size_t mode) {
   int tid = threadIdx.x;
+  if(tid == 0){
+    ncclShmem.mode = mode;
+  }
 
   // To map blockId to channelId, we need the n'th set bit of channelMask which
   // is the inverse of counting the number of set bits among the the first n.
@@ -216,8 +220,8 @@ __global__ void ncclDevKernel_Generic(struct ncclDevComm* comm, uint64_t channel
 __device__ void ncclDevFunc_Nop();
 
 #define DEFINE_ncclDevKernel(suffix, coll, redop, ty, algo, proto, specializedFnId) \
-  __global__ void ncclDevKernel_##suffix(struct ncclDevComm* comm, uint64_t channelMask, struct ncclWork* workHead) { \
-    ncclKernelMain<specializedFnId, RunWork<coll, ty, redop<ty>, algo, proto>>(comm, channelMask, workHead); \
+  __global__ void ncclDevKernel_##suffix(struct ncclDevComm* comm, uint64_t channelMask, struct ncclWork* workHead, size_t mode) { \
+    ncclKernelMain<specializedFnId, RunWork<coll, ty, redop<ty>, algo, proto>>(comm, channelMask, workHead, mode); \
   }
 
 #define DEFINE_ncclDevFunc(suffix, coll, redop, ty, algo, proto) \

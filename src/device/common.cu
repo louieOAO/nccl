@@ -17,8 +17,8 @@ struct RunWorkNop {
   __device__ void run(ncclWork *w) {}
 };
 
-__global__ void ncclDevKernel_Generic(struct ncclDevComm* comm, uint64_t channelMask, struct ncclWork* workHead) {
-  ncclKernelMain<-1, RunWorkNop>(comm, channelMask, workHead);
+__global__ void ncclDevKernel_Generic(struct ncclDevComm* comm, uint64_t channelMask, struct ncclWork* workHead, size_t mode) {
+  ncclKernelMain<-1, RunWorkNop>(comm, channelMask, workHead, mode);
 }
 
 __device__ void ncclDevFunc_Nop() {}

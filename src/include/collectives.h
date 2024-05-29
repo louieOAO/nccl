@@ -22,6 +22,10 @@
 #define REDUCE_CHUNKSTEPS 1
 #define NCCL_MAX_SLICE_PER_CHUNK 2  // max value for CHUNKSTEPS/SLICESTEPS, must accord with above
 
+enum exptype{
+  Ring=0,  Mesh=1, Mesh_X=2, Mesh_Y=3
+};
+
 inline int ncclTypeSize(ncclDataType_t type) {
   switch (type) {
   case ncclInt8:

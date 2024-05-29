@@ -47,6 +47,7 @@ struct ncclInfo {
   // Algorithm details
   int chunkSteps;
   int sliceSteps;
+  size_t mode;
   // Computed later
   ncclDevRedOpFull opFull;
   ncclPattern_t pattern;
@@ -73,6 +74,7 @@ struct ncclInfo {
   int protocol;
   bool userTuned;
   struct ncclInfo *next;
+  
 };
 
 inline ncclResult_t ncclInfoSetDerived(struct ncclInfo* info, int nRanks) {

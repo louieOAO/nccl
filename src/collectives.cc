@@ -28,9 +28,9 @@ ncclResult_t ncclAllGather(const void* sendbuff, void* recvbuff, size_t sendcoun
 }
 
 NCCL_API(ncclResult_t, ncclAllReduce, const void* sendbuff, void* recvbuff, size_t count,
-    ncclDataType_t datatype, ncclRedOp_t op, ncclComm* comm, cudaStream_t stream);
+    ncclDataType_t datatype, ncclRedOp_t op, ncclComm* comm, cudaStream_t stream, size_t mode);
 ncclResult_t ncclAllReduce(const void* sendbuff, void* recvbuff, size_t count,
-    ncclDataType_t datatype, ncclRedOp_t op, ncclComm* comm, cudaStream_t stream) {
+    ncclDataType_t datatype, ncclRedOp_t op, ncclComm* comm, cudaStream_t stream, size_t mode) {
   struct NvtxParamsAllReduce {
     size_t bytes;
     ncclRedOp_t op;
@@ -43,11 +43,27 @@ ncclResult_t ncclAllReduce(const void* sendbuff, void* recvbuff, size_t count,
   };
   NvtxParamsAllReduce payload{count * ncclTypeSize(datatype), op};
   NVTX3_FUNC_WITH_PARAMS(AllReduce, AllReduceSchema, payload)
+  // if(mode != Ring && mode != Mesh){
+  //   size_t offset = count%2? count/2+1 : count/2; 
+  //   struct ncclInfo info_x = { ncclFuncAllReduce, "AllReduce",
+  //     sendbuff, recvbuff, offset, datatype, op, 0, comm, stream, /* Args */
+  //     ALLREDUCE_CHUNKSTEPS, ALLREDUCE_SLICESTEPS };
+  //   info_x.mode = 2;
+  //   NCCLCHECK(ncclEnqueueCheck(&info_x));
 
-  struct ncclInfo info = { ncclFuncAllReduce, "AllReduce",
-    sendbuff, recvbuff, count, datatype, op, 0, comm, stream, /* Args */
-    ALLREDUCE_CHUNKSTEPS, ALLREDUCE_SLICESTEPS };
-  NCCLCHECK(ncclEnqueueCheck(&info));
+  //   struct ncclInfo info_y = { ncclFuncAllReduce, "AllReduce",
+  //      ((double*)sendbuff)+offset, ((double*)recvbuff)+offset, count - offset, datatype, op, 0, comm, stream, /* Args */
+  //     ALLREDUCE_CHUNKSTEPS, ALLREDUCE_SLICESTEPS };
+  //   info_y.mode = 3;
+  //   NCCLCHECK(ncclEnqueueCheck(&info_y));
+
+  // }else{
+    struct ncclInfo info = { ncclFuncAllReduce, "AllReduce",
+      sendbuff, recvbuff, count, datatype, op, 0, comm, stream, /* Args */
+      ALLREDUCE_CHUNKSTEPS, ALLREDUCE_SLICESTEPS, mode };
+    NCCLCHECK(ncclEnqueueCheck(&info));
+  // }
+
   return ncclSuccess;
 }
 

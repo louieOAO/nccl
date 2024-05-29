@@ -23,6 +23,7 @@ extern const char* ncclProtoStr[NCCL_NUM_PROTOCOLS];
 
 #include "net_device.h"
 
+
 enum ncclDevRedOp_t {
   ncclDevSum, ncclDevProd, ncclDevMinMax,
   ncclDevPreMulSum, ncclDevSumPostDiv,

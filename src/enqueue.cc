@@ -433,6 +433,7 @@ static ncclResult_t addCBDCollToPlan(
     struct ncclInfo* collInfo, int* nWorkBudget
   ) {
   ncclResult_t ret = ncclSuccess;
+  plan->mode = collInfo->mode;
   struct ncclKernelPlan::Channel *chans = plan->channels;
   size_t enqBytes;
   uint64_t opCount = uint64_t(plan->collOpCount++) << 1 | 0;
@@ -1236,7 +1237,6 @@ ncclResult_t ncclLaunchPrepare(struct ncclComm* comm) {
   // are about to schedule). Now push an additional frame for allocating
   // work structs (see appendWorkElem() variants all use scoped allocation).
   ncclMemoryStackPush(&comm->memScoped);
-
   if (tasks->nTasksColl + tasks->nTasksP2p != 0) {
     do {
       struct ncclKernelPlan* plan = ncclMemoryPoolAlloc<struct ncclKernelPlan>(&comm->memPool_ncclKernelPlan, &comm->memPermanent);
@@ -1353,7 +1353,7 @@ ncclResult_t ncclLaunchKernel(struct ncclComm* comm, struct ncclKernelPlan* plan
   dim3 grid = {(unsigned)plan->channelCount, 1, 1};
   dim3 block = {(unsigned)plan->threadPerBlock, 1, 1};
   size_t smem = ncclShmemDynamicSize(comm->cudaArch);
-  void *args[3] = {&comm->devComm, &plan->channelMask, &plan->workHead};
+  void *args[4] = {&comm->devComm, &plan->channelMask, &plan->workHead, &plan->mode};
   #if CUDART_VERSION >= 11080
   int driverVersion;
   NCCLCHECK(ncclCudaDriverVersion(&driverVersion));

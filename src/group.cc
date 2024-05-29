@@ -155,7 +155,6 @@ static ncclResult_t doLaunches(struct ncclComm* head) {
         if (moreRounds) {
           // Pop next unlaunched kernel
           struct ncclKernelPlan* plan = comm->unlaunchedPlansHead;
-
           if (plan != nullptr) {
             comm->unlaunchedPlansHead = plan->next;
             CUDACHECKGOTO(cudaSetDevice(comm->cudaDev), result, failure);

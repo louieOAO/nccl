@@ -182,7 +182,7 @@ struct ncclKernelPlan {
   // A kernel plan is also a callback that reclaims itself. Hence this must
   // be the first member.
   struct ncclCommCallback reclaimer;
-
+  size_t mode;
   struct ncclComm* comm;
   struct ncclKernelPlan* next;
 
@@ -198,7 +198,7 @@ struct ncclKernelPlan {
   struct ncclWork* workHead;
 
   int collOpCount; // zero based for this plan
-
+  
   struct ncclIntruQueue<struct ncclPointerList, &ncclPointerList::next> ipcMemQueue;
   struct ncclIntruQueue<struct ncclNvlsMcHandleList, &ncclNvlsMcHandleList::next> nvlsMcHandleQueue;
   struct ncclIntruQueue<struct ncclCollnetHandleList, &ncclCollnetHandleList::next> collnetHandleQueue;
